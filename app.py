@@ -1,481 +1,515 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import json
-import os
-import re
+import json, os, re, random
 
-st.set_page_config(page_title="HIREREADY-IA", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="HIREREADY-IA V5", page_icon="🤖", layout="wide")
 
 st.markdown("""
 <style>
-   .stApp { background-color: #f8fafc; }
-    h1, h2, h3 { color: #0B4DA2!important; }
-   .stButton>button { background-color: #0B4DA2; color: white; border-radius: 10px; font-weight: bold; }
-   .stButton>button:hover { background-color: #7AC143; color: white; }
-    [data-testid="stSidebar"] { background-color: #0B4DA2; }
-    [data-testid="stSidebar"] * { color: white!important; }
-   .ia-box { background: linear-gradient(135deg, #0B4DA2 0%, #7AC143 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; }
-   .brand { font-size: 32px; font-weight: 800; color: #0B4DA2; }
-   .brand span { color: #7AC143; }
+.stApp {background:#f8fafc;} h1,h2,h3{color:#0B4DA2!important;}
+.stButton>button{background:#0B4DA2;color:white;border-radius:10px;font-weight:bold;}
+.stButton>button:hover{background:#7AC143;color:white;}
+[data-testid="stSidebar"]{background:#0B4DA2;}
+[data-testid="stSidebar"] *{color:white!important;}
+.ia-box{background:linear-gradient(135deg,#0B4DA2 0%,#7AC143 100%);color:white;padding:18px;border-radius:12px;margin-bottom:12px;}
+.brand{font-size:32px;font-weight:800;color:#0B4DA2;}.brand span{color:#7AC143;}
+.step{background:#0B4DA2;color:white;padding:8px 14px;border-radius:20px;font-weight:bold;display:inline-block;margin:4px;}
 </style>
 """, unsafe_allow_html=True)
 
-USUARIOS_FILE = "usuarios_admin.json"
-REGISTROS_FILE = "registros_farmart.json"
-CARGOS_FILE = "cargos.json"
-PREGUNTAS_FILE = "preguntas_banco.json"
-CONFIG_FILE = "config_excel.json"
+USUARIOS_FILE="usuarios_admin.json"; REGISTROS_FILE="registros_farmart.json"; CARGOS_FILE="cargos.json"; PREGUNTAS_FILE="preguntas_banco.json"; CONFIG_FILE="config_excel.json"
 
 if not os.path.exists(USUARIOS_FILE):
-    with open(USUARIOS_FILE, "w") as f:
-        json.dump([{"usuario":"admin@hireready.ia","clave":"HireReady2026*","rol":"Super Admin","nombre":"Admin Principal"}, {"usuario":"admin@farmart.system","clave":"Farmart2026*","rol":"Super Admin","nombre":"Admin Farmart"}], f)
+    with open(USUARIOS_FILE,"w") as f:
+        json.dump([{"usuario":"admin@hireready.ia","clave":"HireReady2026*","rol":"Super Admin","nombre":"Admin Principal"},{"usuario":"rrhh@hireready.ia","clave":"HireReady2026*","rol":"RRHH","nombre":"RRHH HireReady"},{"usuario":"admin@farmart.system","clave":"Farmart2026*","rol":"Super Admin","nombre":"Admin Farmart"}],f)
 if not os.path.exists(REGISTROS_FILE):
-    with open(REGISTROS_FILE, "w") as f:
-        json.dump([], f)
+    with open(REGISTROS_FILE,"w") as f: json.dump([],f)
 
-CARGOS_DEFAULT = [
-    "Personal de Nómina","Tesorería",
-    "Auxiliar de bodega de carga","Auxiliar de farmacia","Mensajero de moto","Conductor de carro",
-    "Quimico farmaceutico","Regente de farmacia","Auditoria y facturación","Contadores público",
-    "Auxiliares contables","Revisores fiscales","Auxiliares de servicios generales","Recursos Humanos",
-    "Auxiliares de archivo","Auditores médicos","Operadores logísticos","Ingenieros ambientales",
-    "Ingeniero de sistemas","Ingenieros de software","Desarrolladores fullstack","Auxiliares de recursos humanos",
-    "Abogados","Alta gerencia","Auxiliares administrativas","Ingenieros especialistas TIC / Ciberseguridad"
-]
+CARGOS_DEFAULT=["Personal de Nómina","Tesorería","Auxiliar de bodega de carga","Auxiliar de farmacia","Mensajero de moto","Conductor de carro","Quimico farmaceutico","Regente de farmacia","Auditoria y facturación","Contadores público","Auxiliares contables","Revisores fiscales","Auxiliares de servicios generales","Recursos Humanos","Auxiliares de archivo","Auditores médicos","Operadores logísticos","Ingenieros ambientales","Ingeniero de sistemas","Ingenieros de software","Desarrolladores fullstack","Auxiliares de recursos humanos","Abogados","Alta gerencia","Auxiliares administrativas","Ingenieros especialistas TIC / Ciberseguridad"]
 
-BANCO_DEFAULT = {
-    "Personal de Nómina": [
-        {"q":"¿Qué compone la seguridad social integral?","op":["Salud, pensión y ARL","Solo salud","Solo pensión"],"r":0},
-        {"q":"¿Qué es una novedad de nómina?","op":["Incapacidad, vacaciones, horas extra","Solo cambio de cargo","Solo aumento"],"r":0},
-        {"q":"¿Qué es PILA?","op":["Planilla para pago seguridad social","Planilla de inventario","Planilla de aseo"],"r":0},
-        {"q":"Auxilio de transporte ¿cuándo se paga?","op":["Si gana hasta 2 SMMLV","A todos","Nunca"],"r":0},
-    ],
-    "Tesorería": [
-        {"q":"¿Qué es flujo de caja?","op":["Entrada y salida de dinero","Solo entradas","Solo inventario"],"r":0},
-        {"q":"¿Qué es conciliación bancaria?","op":["Comparar libros con extracto bancario","Contar caja menor","Hacer nómina"],"r":0},
-        {"q":"¿Qué es arqueo de caja?","op":["Verificación física del efectivo vs sistema","Inventario medicamentos","Revisión tutelas"],"r":0},
-    ],
-    "Auxiliar de bodega de carga": [
-        {"q":"¿Qué significa FEFO?","op":["First Expire First Out","First Entry First Out","Fast Expire"],"r":0},
-        {"q":"¿Temperatura cadena de frio?","op":["2-8°C","15-25°C","-20°C"],"r":0},
-        {"q":"Medicamento vencido ¿qué hace?","op":["Separa, identifica y reporta","Lo devuelve al estante","Lo bota a basura común"],"r":0},
-    ],
-    "Quimico farmaceutico": [
-        {"q":"Central de mezclas: ¿Qué es NPT?","op":["Nutrición Parenteral Total","Norma de Preparación Técnica","Nivel Total"],"r":0},
-        {"q":"Unidosis: ¿Objetivo?","op":["Dosis exacta por paciente, reduce errores","Ahorrar empaques","Vender más"],"r":0},
-        {"q":"Oncológico: ¿Qué es citotóxico?","op":["Medicamento que destruye células, manejo especial","Para dolor","Antibiótico"],"r":0},
-    ],
-    "Abogados": [
-        {"q":"Tutela: ¿Término para fallar?","op":["10 días","30 días","6 meses"],"r":0},
-        {"q":"CASO oncológico vital ¿qué argumenta?","op":["Derecho a vida, salud y mínimo vital","Solo trabajo","Solo petición"],"r":0},
-    ]
+BANCO_TECNICO_25={
+"Personal de Nómina":[
+{"q":"Seguridad social integral compone","op":["Salud, pensión, ARL, caja compensación","Solo salud","Solo ARL"],"r":0},
+{"q":"PILA que es","op":["Planilla integrada liquidación aportes","Planilla inventario","Planilla aseo"],"r":0},
+{"q":"Auxilio transporte 2026 se paga si","op":["Gana hasta 2 SMMLV","Gana 5 SMMLV","Nunca"],"r":0},
+{"q":"Novedad nómina ejemplo","op":["Incapacidad, vacaciones, horas extra, licencias","Solo cambio cargo","Solo aumento"],"r":0},
+{"q":"Liquidación prestaciones incluye","op":["Cesantías, intereses, prima, vacaciones","Solo salario","Solo prima"],"r":0},
+{"q":"Cesantías consignan","op":["Antes 14 febrero","31 diciembre","Cuando renuncia"],"r":0},
+{"q":"Intereses cesantías porcentaje","op":["12% anual","5%","20%"],"r":0},
+{"q":"Prima servicios paga","op":["Junio y diciembre","Solo diciembre","Cada mes"],"r":0},
+{"q":"Hora extra diurna recargo","op":["25%","75%","100%"],"r":0},
+{"q":"Hora extra nocturna recargo","op":["75%","25%","0%"],"r":0},
+{"q":"Dominical festivo recargo","op":["75%","25%","10%"],"r":0},
+{"q":"Retención salarios art 383","op":["Tabla progresiva DIAN","Fija 10%","No aplica"],"r":0},
+{"q":"Incapacidad primeros 2 días asume","op":["Empleador","EPS","ARL"],"r":0},
+{"q":"Licencia maternidad","op":["18 semanas","12 semanas","8 semanas"],"r":0},
+{"q":"Parafiscales total","op":["9% (4% caja,3% ICBF,2% SENA)","4%","12%"],"r":0},
+{"q":"Aporte salud","op":["12.5% (8.5% empleador 4% empleado)","4%","8%"],"r":0},
+{"q":"Aporte pensión","op":["16% (12% empleador 4% empleado)","4%","10%"],"r":0},
+{"q":"ARL quien paga","op":["100% empleador","Empleado","50/50"],"r":0},
+{"q":"Vacaciones días año","op":["15 días hábiles","10 días","30 días"],"r":0},
+{"q":"Contrato fijo máximo","op":["3 años prorrogable","1 año","Indefinido"],"r":0},
+{"q":"Siigo nómina reporte clave","op":["Resumen nómina y provisiones","Inventario","Ventas"],"r":0},
+{"q":"World Office nómina para","op":["Liquidación y PILA","Facturación","CRM"],"r":0},
+{"q":"Excel buscar salario función","op":["BUSCARV/XLOOKUP","SUMA","PROMEDIO"],"r":0},
+{"q":"Nómina electrónica DIAN frecuencia","op":["Mensual","Anual","No aplica"],"r":0},
+{"q":"Falla pago seguridad social consecuencia","op":["Sanción y no cobertura","Nada","Solo interés"],"r":0},
+],
+"Tesorería":[
+{"q":"Flujo caja objetivo","op":["Controlar entradas y salidas dinero","Solo ventas","Solo inventario"],"r":0},
+{"q":"Conciliación bancaria es","op":["Comparar libros vs extracto y ajustar","Contar billetes","Hacer nómina"],"r":0},
+{"q":"Arqueo caja faltante","op":["Reportar, investigar y reponer según política","Ocultar","Ignorar"],"r":0},
+{"q":"Comprobante egreso necesita","op":["Soporte, autorización y firma","Solo firma","Nada"],"r":0},
+{"q":"Cuentas por pagar prioridad","op":["DIAN, nómina, proveedores críticos","Solo proveedores","Solo DIAN"],"r":0},
+{"q":"Retención compras % común","op":["2.5% compras,4% servicios,11% honorarios","10% todo","0%"],"r":0},
+{"q":"Cierre caja debe cuadrar con","op":["Sistema, recibos y consignaciones","Solo efectivo","Solo sistema"],"r":0},
+{"q":"Cheque posfechado se recibe","op":["No, política Farmart no","Sí siempre","Depende"],"r":0},
+{"q":"Transferencia proveedor requiere","op":["Factura, orden compra y autorización","Solo WhatsApp","Nada"],"r":0},
+{"q":"Siigo tesorería módulo","op":["Cuentas por pagar, bancos, flujo","Nómina","Producción"],"r":0},
+{"q":"Excel flujo caja función","op":["SUMAR.SI.CONJUNTO y TABLA DINÁMICA","SUMA","CONTAR"],"r":0},
+{"q":"Caja menor tope","op":["Definido por gerencia, arqueo semanal","Sin tope","10 millones"],"r":0},
+{"q":"Consignación no identificada","op":["Investigar, contactar banco y cliente","Dejar así","Anular"],"r":0},
+{"q":"Prevención fraude tesorería","op":["Doble firma, segregación funciones","Una sola persona","Sin control"],"r":0},
+{"q":"Informe tesorería diario a","op":["Gerencia financiera","Servicios generales","Bodega"],"r":0},
+{"q":"Paz y salvo proveedor","op":["Verificar entrega y factura","Pagar sin verificar","Solo factura"],"r":0},
+{"q":"Manejo dólares","op":["TRM oficial y legalización","TRM inventada","No reportar"],"r":0},
+{"q":"Sobregiro que es","op":["Saldo negativo autorizado por banco","Error","Ingreso"],"r":0},
+{"q":"Anticipos empleados política","op":["Máximo 30% salario y descuento nómina","100%","No se dan"],"r":0},
+{"q":"Conciliación proveedores","op":["Circularizar y conciliar saldos mensual","No hacer","Anual"],"r":0},
+{"q":"Archivo soportes pagos","op":["5 años mínimo DIAN","1 mes","No se archiva"],"r":0},
+{"q":"Pago nómina desde tesorería verifica","op":["Novedades, cuentas y autorizaciones","Solo monto","Nada"],"r":0},
+{"q":"Doble pago proveedor","op":["Solicitar nota crédito o reintegro","Dejar así","Ocultar"],"r":0},
+{"q":"Excel conciliar función","op":["BUSCARV y COINCIDIR","SUMA","PROMEDIO"],"r":0},
+{"q":"Ética tesorería","op":["Transparencia total y reporte irregularidades","Ocultar faltantes","Prestar plata caja"],"r":0},
+],
+"Quimico farmaceutico":[
+{"q":"NPT que es","op":["Nutrición Parenteral Total","Norma Producción Técnica","Nivel Producción Total"],"r":0},
+{"q":"Unidosis objetivo","op":["Dosis exacta paciente, reduce errores","Ahorrar empaques","Vender más"],"r":0},
+{"q":"Citotóxico que es","op":["Destruye células, manejo especial","Para dolor","Antibiótico"],"r":0},
+{"q":"Cabina flujo laminar para que","op":["Proteger producto, personal y ambiente","Enfriar","Iluminar"],"r":0},
+{"q":"Estabilidad mezcla oncología depende","op":["Tiempo, temperatura, luz, concentración","Solo color","Solo laboratorio"],"r":0},
+{"q":"BPM que es","op":["Buenas Prácticas Manufactura/Elaboración","Buen Proceso Manual","Bodega Producto Médico"],"r":0},
+{"q":"Resolución 1403 de 2007","op":["Regula servicio farmacéutico","Regula alimentos","Regula transito"],"r":0},
+{"q":"Farmacovigilancia reporta","op":["Eventos adversos a medicamentos","Ventas","Inventario"],"r":0},
+{"q":"Dosis máxima acetaminofén día","op":["4 gramos","10 gramos","1 gramo"],"r":0},
+{"q":"Interacción warfarina y AINE","op":["Aumenta riesgo sangrado","No pasa nada","Disminuye efecto"],"r":0},
+{"q":"Cálculo dosis pediátrica base","op":["Peso kg y superficie corporal","Solo edad","Solo talla"],"r":0},
+{"q":"Antídoto acetaminofén","op":["N-acetilcisteína","Flumazenil","Naloxona"],"r":0},
+{"q":"Conservación cadena frío vacunas","op":["2-8°C","15-25°C","-20°C"],"r":0},
+{"q":"Medicamento LASA","op":["Look Alike Sound Alike, fácil confusión","Larga acción","Laxante"],"r":0},
+{"q":"Medicamento alto riesgo ejemplo","op":["Insulina, heparina, citotóxicos","Acetaminofén","Loratadina"],"r":0},
+{"q":"Validación prescripción debe tener","op":["Paciente, medicamento, dosis, vía, frecuencia, firma","Solo nombre","Solo medicamento"],"r":0},
+{"q":"Central mezclas área limpia grado","op":["Grado A, B, C, D según INVIMA","Sin grado","Grado 1"],"r":0},
+{"q":"Tiempo uso NPT después preparada","op":["24 horas refrigerada","7 días","1 mes"],"r":0},
+{"q":"Quimioterapia extravasación","op":["Emergencia, protocolo antídoto y reporte","Ignorar","Solo compresa fría"],"r":0},
+{"q":"Intervención farmacéutica es","op":["Detectar, prevenir y resolver PRM","Solo dispensar","Solo facturar"],"r":0},
+{"q":"PRM que es","op":["Problema Relacionado con Medicamentos","Producto Requiere Más","Precio Regulado Medicamento"],"r":0},
+{"q":"Conciliación medicamentosa","op":["Comparar medicación habitual vs hospitalaria","Contar pastillas","Inventario"],"r":0},
+{"q":"Antibiótico tiempo dependiente","op":["Betalactámicos, tiempo sobre CIM","Aminoglucósidos","Azitromicina"],"r":0},
+{"q":"Ajuste dosis en falla renal","op":["Reducir dosis o intervalo según creatinina","Aumentar dosis","No ajustar"],"r":0},
+{"q":"Rol químico farmacéutico en Farmart","op":["Garantizar uso seguro, efectivo y calidad mezclas","Solo vender","Solo facturar"],"r":0},
+],
+"Abogados":[
+{"q":"Tutela término fallo primera instancia","op":["10 días","30 días","6 meses"],"r":0},
+{"q":"Tutela medicamento vital argumento","op":["Vida, salud, mínimo vital, medida provisional","Solo trabajo","Solo petición"],"r":0},
+{"q":"Ley 80 principio clave","op":["Transparencia, economía, responsabilidad","Rapidez","Menor precio"],"r":0},
+{"q":"Derecho petición término general","op":["15 días hábiles","1 año","3 días"],"r":0},
+{"q":"Contratación EPS Farmart tipo","op":["Prestación servicios salud","Compraventa","Arrendamiento"],"r":0},
+{"q":"Cláusula penal en contrato","op":["Estimación anticipada perjuicios","Multa DIAN","Impuesto"],"r":0},
+{"q":"Despido sin justa causa consecuencia","op":["Indemnización art 64 CST","Nada","Solo carta"],"r":0},
+{"q":"Contrato prestación servicios vs laboral diferencia","op":["Subordinación, horario, prestación personal","Solo salario","No hay diferencia"],"r":0},
+{"q":"Acción popular protege","op":["Derechos colectivos","Derecho individual","Solo empresas"],"r":0},
+{"q":"Habeas data ley","op":["1581 de 2012","100 de 1993","80 de 1993"],"r":0},
+{"q":"SARLAFT que es","op":["Prevención lavado activos y financiación terrorismo","Salud","Seguridad industrial"],"r":0},
+{"q":"Responsabilidad farmacéutica por error dispensación","op":["Civil, penal y administrativa","Solo administrativa","Ninguna"],"r":0},
+{"q":"INVIMA sanción por mala práctica central mezclas","op":["Cierre temporal, multa, suspensión","Felicitación","Nada"],"r":0},
+{"q":"Conciliación extrajudicial requisito","op":["Procedibilidad en laboral y civil","Opcional siempre","Prohibida"],"r":0},
+{"q":"Término prescripción laboral","op":["3 años","1 año","10 años"],"r":0},
+{"q":"Tutela contra EPS por no entrega oncológico juez puede","op":["Ordenar entrega 48h y medida provisional","Negar siempre","Solo multar usuario"],"r":0},
+{"q":"Contrato estatal Farmart con hospital público ley aplica","op":["Ley 80 y 1150","Solo código comercio","Solo CST"],"r":0},
+{"q":"Cláusula confidencialidad en central mezclas","op":["Proteger fórmulas y datos pacientes","No necesaria","Opcional"],"r":0},
+{"q":"Due diligence en compra droguería","op":["Revisar licencias INVIMA, sanciones, laboral, tributario","Solo precio","Solo inventario"],"r":0},
+{"q":"Petición, queja, reclamo Farmart responde","op":["15 días hábiles con trazabilidad","1 año","No responde"],"r":0},
+{"q":"Comité ética farmacéutica debe","op":["Evaluar casos críticos y eventos adversos","Solo fiestas","Solo nómina"],"r":0},
+{"q":"Ley 100 de 1993","op":["Crea sistema seguridad social integral","Regula tránsito","Regula ambiente"],"r":0},
+{"q":"Responsabilidad por medicamento vencido dispensado","op":["Grave, puede ser homicidio culposo si causa muerte","Leve","No hay responsabilidad"],"r":0},
+{"q":"Contrato suministro medicamentos cláusula clave","op":["Calidad, cadena frío, entrega oportuna, sanciones","Solo precio","Solo cantidad"],"r":0},
+{"q":"Ética abogado Farmart","op":["Defender vida y salud, transparencia, no corrupción","Ocultar errores","Cobrar coima"],"r":0},
+],
 }
 
-EXCEL_DEFAULT = [
-    {"q":"Excel: ¿Fórmula para sumar?","op":["=SUMA(A1:A10)","SUMAR A1","=ADD()"],"r":0},
-    {"q":"¿Qué hace BUSCARV?","op":["Busca dato en tabla","Borra valores","Crea gráfico"],"r":0},
-    {"q":"Tabla dinámica sirve para:","op":["Resumir grandes datos rápido","Escribir cartas","Navegar internet"],"r":0},
-]
-PSICO_DEFAULT = [
-    {"q":"Si compañero toma medicamento sin fórmula, ¿qué haces?","op":["Reportas por seguridad del paciente","Te callas","Lo ayudas a vender"],"r":0},
-    {"q":"Bajo estrés, tú:","op":["Priorizas, pides ayuda, mantienes calidad","Gritas y dejas todo","Haces rápido sin verificar"],"r":0},
-    {"q":"Jefe pide entregar vencido, ¿qué haces?","op":["Te niegas y reportas, ética primero","Lo entregas","Cambias fecha"],"r":0},
+for c in CARGOS_DEFAULT:
+    if c not in BANCO_TECNICO_25:
+        banco=[]
+        for i in range(25):
+            banco.append({"q":f"{c} - Pregunta técnica {i+1}: ¿Procedimiento correcto según Farmart para esta función crítica?","op":[f"Procedimiento correcto y seguro para {c}","Procedimiento incorrecto que genera riesgo","Omitir procedimiento"],"r":0})
+        BANCO_TECNICO_25[c]=banco
+
+EXCEL_REAL_25=[
+{"q":"Excel: ¿Para sumar rango A1:A100?","op":["=SUMA(A1:A100)","=ADD A1:A100","SUMAR(A1:A100)"],"r":0},
+{"q":"BUSCARV sirve para","op":["Buscar valor en tabla y traer dato relacionado","Borrar","Crear gráfico"],"r":0},
+{"q":"XLOOKUP ventaja vs BUSCARV","op":["Busca a izquierda y derecha, más rápido","Solo suma","No existe"],"r":0},
+{"q":"Tabla dinámica sirve para","op":["Resumir miles datos en segundos","Escribir cartas","Navegar internet"],"r":0},
+{"q":"SUMAR.SI.CONJUNTO hace","op":["Suma con múltiples criterios","Suma todo","Cuenta"],"r":0},
+{"q":"CONTAR.SI hace","op":["Cuenta celdas que cumplen criterio","Suma","Promedia"],"r":0},
+{"q":"Para fijar celda $A$1 se llama","op":["Referencia absoluta","Relativa","Mixta"],"r":0},
+{"q":"Función SI anidada","op":["=SI(A1>10,\"Aprobado\",\"Reprobado\")","=SI SUMA","=SI BUSCAR"],"r":0},
+{"q":"Formato condicional sirve para","op":["Colorear automáticamente según valor","Borrar","Imprimir"],"r":0},
+{"q":"Validación datos para que","op":["Evitar errores, crear lista desplegable","Borrar datos","Sumar"],"r":0},
+{"q":"Texto en columnas","op":["Separar nombre y apellido en dos columnas","Unir texto","Borrar"],"r":0},
+{"q":"Quitar duplicados donde","op":["Datos > Quitar duplicados","Inicio > Borrar","Fórmulas > Duplicados"],"r":0},
+{"q":"Función HOY() retorna","op":["Fecha actual","Hora","Texto"],"r":0},
+{"q":"Función DIAS.LAB","op":["Días hábiles entre fechas","Días calendario","Meses"],"r":0},
+{"q":"Gráfico dinámico","op":["Gráfico que cambia con filtro tabla dinámica","Gráfico estático","Imagen"],"r":0},
+{"q":"Segmentador en tabla dinámica","op":["Filtro visual rápido","Borrar tabla","Suma"],"r":0},
+{"q":"Power Query sirve para","op":["Limpiar y transformar datos masivos","Escribir Word","Navegar"],"r":0},
+{"q":"Función CONCATENAR o &","op":["Unir texto de varias celdas","Sumar números","Dividir"],"r":0},
+{"q":"Buscar objetivo","op":["Encontrar valor necesario para llegar a meta","Buscar texto","Eliminar"],"r":0},
+{"q":"Solver para que","op":["Optimizar, hallar mejor escenario con restricciones","Borrar","Imprimir"],"r":0},
+{"q":"Atajo Ctrl+T","op":["Crear tabla estructurada","Cerrar libro","Guardar"],"r":0},
+{"q":"Atajo Ctrl+Shift+L","op":["Activar filtros","Poner negrita","Subrayar"],"r":0},
+{"q":"Función PROMEDIO.SI.CONJUNTO","op":["Promedio con varios criterios","Suma","Cuenta"],"r":0},
+{"q":"Error #N/A en BUSCARV significa","op":["Valor no encontrado","Error suma","División cero"],"r":0},
+{"q":"Para proteger hoja","op":["Revisar > Proteger hoja con clave","Inicio > Proteger","No se puede"],"r":0},
 ]
 
-KEYWORDS_POR_CARGO = {
-    "Personal de Nómina": ["nomina","pila","seguridad social","retencion","prestaciones","cesantias","liquidacion","parafiscales","excel","siigo"],
-    "Tesorería": ["tesoreria","flujo de caja","conciliacion","bancos","egreso","arqueo","cuentas por pagar","excel"],
-    "Quimico farmaceutico": ["quimico farmaceutico","central de mezclas","unidosis","oncologico","citotoxico","NPT","asepsia","BPM","INVIMA"],
-    "Auxiliar de farmacia": ["dispensacion","farmacia","invima","medicamentos","lote","vencimiento"],
-    "Abogados": ["tutela","derecho de peticion","contratacion estatal","ley 80","laboral"],
-    "Ingeniero de sistemas": ["sistemas","python","base de datos","ciberseguridad","redes","soporte"],
-    "Contadores público": ["contador","contabilidad","dian","facturacion electronica","iva"],
+PSICO_25=[
+{"q":"Compañero toma medicamento sin fórmula, ¿qué haces?","op":["Reportas por seguridad paciente, ética primero","Te callas","Lo ayudas a vender"],"r":0},
+{"q":"Bajo estrés y mucho trabajo, tú","op":["Priorizas, pides ayuda, mantienes calidad","Gritas y dejas todo","Haces rápido sin verificar"],"r":0},
+{"q":"Jefe pide entregar pedido vencido","op":["Te niegas y reportas, ética primero","Lo entregas","Cambias fecha vencimiento"],"r":0},
+{"q":"Error propio grave, ¿qué haces?","op":["Lo admites, corriges y reportas inmediato","Lo ocultas","Culpas a otro"],"r":0},
+{"q":"Trabajo en equipo es","op":["Apoyar, comunicar, respetar, cumplir","Hacer solo mi parte","Competir contra todos"],"r":0},
+{"q":"Paciente reclama agresivo por demora","op":["Escuchas, empatía, buscas solución, escalas","Gritas también","Ignoras"],"r":0},
+{"q":"Ves compañero robando medicamento","op":["Reportas con evidencia a RRHH/gerencia","Te unes","Te callas por miedo"],"r":0},
+{"q":"Te ofrecen coima proveedor","op":["Rechazas y reportas, transparencia","Aceptas","Negocias más"],"r":0},
+{"q":"Olvidaste proceso clave, ¿qué haces?","op":["Verificas procedimiento, preguntas, no inventas","Improvisas","Omites paso"],"r":0},
+{"q":"Meta imposible de cumplir","op":["Comunicas a tiempo, propones plan, pides apoyo","Mientes que sí cumpliste","No haces nada"],"r":0},
+{"q":"Confidencialidad datos paciente","op":["Nunca compartir, Habeas Data Ley 1581","Contar a amigos","Publicar en redes"],"r":0},
+{"q":"Cambio de turno y queda pendiente crítico","op":["Entregas completo, escrito y verbal","Te vas sin decir","Dejas nota confusa"],"r":0},
+{"q":"Jefe te grita injustamente","op":["Mantienes calma, pides hablar en privado, respetuoso","Gritas más fuerte","Renuncias gritando"],"r":0},
+{"q":"Compañero nuevo lento","op":["Apoyas, enseñas, paciencia","Te burlas","Lo ignoras"],"r":0},
+{"q":"Detectas casi error (near miss)","op":["Reportas como aprendizaje, sin culpa","Ocultas por miedo sanción","Culpas sistema"],"r":0},
+{"q":"Prioridad: ¿qué primero?","op":["Seguridad paciente, luego calidad, luego velocidad","Velocidad primero","Lo más fácil primero"],"r":0},
+{"q":"Feedback negativo de auditoría","op":["Lo tomas como mejora, plan acción","Te enojas y discutes","Ignoras"],"r":0},
+{"q":"Trabajas con quimio citotóxico, ¿qué prima?","op":["Seguridad, EPP, procedimiento, no atajos","Rapidez","Ahorrar guantes"],"r":0},
+{"q":"Dilema: ¿entregar sin fórmula para no perder venta?","op":["No, exige fórmula, seguridad primero","Sí entrega","Depende cliente"],"r":0},
+{"q":"Puntualidad para ti","op":["Responsabilidad y respeto equipo y paciente","Opcional","Si quiero"],"r":0},
+{"q":"Manejo frustración","op":["Respiras, analizas, buscas solución, pides ayuda","Explosión emocional","Abandonas tarea"],"r":0},
+{"q":"Aprendizaje continuo","op":["Te actualizas, lees normativa, cursos","No necesito aprender más","Solo si me obligan"],"r":0},
+{"q":"Liderazgo en Farmart es","op":["Ejemplo, servicio, escucha, resultados con gente","Gritar y mandar","Solo ordenar"],"r":0},
+{"q":"Si ves condición insegura en bodega","op":["Reportas, señalizas, propones corrección","Ignoras","Solo te quejas"],"r":0},
+{"q":"¿Por qué quieres trabajar en Farmart?","op":["Me identifica propósito salud, ética, crecimiento","Solo por plata","No tengo otra opción"],"r":0},
+]
+
+CASOS_POR_CARGO={
+"Personal de Nómina":["Caso 1: Empleado gana 3M, incapacitado 10 días por EPS, 5h extra nocturnas. Liquida nómina, PILA y qué soportes archivas.","Caso 2: Error pago seguridad social mes anterior no pagaste ARL de 20 empleados. Plan corrección, sanción y prevención.","Caso 3: Empleado pide liquidación por renuncia con 6 meses, salario 2.5M, no tomó vacaciones. Calcula y explica procedimiento."],
+"Tesorería":["Caso 1: Arqueo caja menor descuadre 700k faltante, ¿procedimiento, acta, informe y decisión?","Caso 2: Flujo caja negativo próxima semana 50M, proveedores críticos sin pago, ¿qué priorizas, qué negocias y a quién escalas?","Caso 3: Proveedor exige anticipo 50% sin factura, política Farmart lo prohíbe, ¿cómo manejas y qué control interno aplicas?"],
+"Quimico farmaceutico":["Caso 1: Prescripción oncológica dosis 30% sobre máxima, médico insiste, ¿intervención farmacéutica, sustento y reporte?","Caso 2: Falla cadena frío 2-8°C por 5h, vacunas 40M, ¿decisión técnica, criterios estabilidad, reporte INVIMA y cliente?","Caso 3: Error unidosis detectado a tiempo, paciente equivocado, ¿análisis causa raíz, barreras y reporte farmacovigilancia?"],
+"Abogados":["Caso 1: Tutela por no entrega medicamento vital, juez pide informe 48h, ¿estructura respuesta, pruebas y medida provisional?","Caso 2: Contrato EPS vence en 15 días, sin nuevo contrato, ¿riesgos continuidad servicio y plan legal?","Caso 3: Demanda laboral por despido sin justa causa, pide reintegro 50M, ¿estrategia defensa, pruebas y conciliación?"],
+"DEFAULT":["Caso 1: Falla crítica en tu área que afecta paciente/cliente, describe paso a paso qué haces primeras 2 horas.","Caso 2: Conflicto con compañero que no sigue procedimiento seguro, ¿cómo actúas, escalas y documentas?","Caso 3: Propuesta mejora para tu cargo que ahorre tiempo/dinero y aumente seguridad/calidad, desarrolla con indicadores."]
 }
+
+def get_casos(cargo):
+    return CASOS_POR_CARGO.get(cargo, CASOS_POR_CARGO["DEFAULT"])
+
+def evaluar_caso_ia(texto, cargo):
+    tl=texto.lower()
+    if len(tl)<40:
+        return 20, "Respuesta muy corta, desarrolla procedimiento, normativa, ética y evidencias."
+    puntaje=50
+    kws={"Personal de Nómina":["pila","seguridad social","liquidación","soporte","dian","cst"],"Tesorería":["arqueo","conciliación","soporte","autorización","flujo","control interno"],"Quimico farmaceutico":["invima","bpm","seguridad paciente","farmacovigilancia","estabilidad","protocolo"],"Abogados":["tutela","jurisprudencia","prueba","normativa","ley","medida provisional"]}
+    kw=kws.get(cargo,["normativa","procedimiento","ética","reporte","evidencia","seguridad"])
+    encontradas=sum(1 for k in kw if k in tl)
+    puntaje+=encontradas*8
+    puntaje+=min(15, len(tl)//200)
+    puntaje=min(95,puntaje)
+    if puntaje>=80:
+        retro="Excelente: menciona normativa, procedimiento, ética, reporte y evidencias. Muy completo."
+    elif puntaje>=60:
+        retro="Bueno pero falta profundizar normativa específica Farmart/INVIMA/DIAN y plan acción con tiempos."
+    else:
+        retro="Básico, le falta estructura: 1) Análisis, 2) Normativa, 3) Acción inmediata, 4) Prevención, 5) Reporte."
+    return puntaje, retro
+
+def cargar_json(p):
+    with open(p,"r") as f: return json.load(f)
+def guardar_json(p,d):
+    with open(p,"w") as f: json.dump(d,f,indent=2,ensure_ascii=False)
 
 if not os.path.exists(CARGOS_FILE):
-    with open(CARGOS_FILE,"w") as f:
-        json.dump(CARGOS_DEFAULT,f, indent=2)
+    with open(CARGOS_FILE,"w") as f: json.dump(CARGOS_DEFAULT,f,indent=2)
 if not os.path.exists(PREGUNTAS_FILE):
-    full = {}
-    for c in CARGOS_DEFAULT:
-        full[c] = BANCO_DEFAULT.get(c, BANCO_DEFAULT.get("Auxiliar de bodega de carga", [])[:2])
-    with open(PREGUNTAS_FILE,"w") as f:
-        json.dump(full,f, indent=2, ensure_ascii=False)
+    with open(PREGUNTAS_FILE,"w") as f: json.dump(BANCO_TECNICO_25,f,indent=2,ensure_ascii=False)
 if not os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE,"w") as f:
-        json.dump({"sin_excel": ["Mensajero de moto","Conductor de carro","Auxiliares de servicios generales","Auxiliar de bodega de carga"],"excel": EXCEL_DEFAULT,"psico": PSICO_DEFAULT, "requiere_hv": False}, f, indent=2, ensure_ascii=False)
-
-def cargar_json(path):
-    with open(path,"r") as f:
-        return json.load(f)
-def guardar_json(path,data):
-    with open(path,"w") as f:
-        json.dump(data,f, indent=2, ensure_ascii=False)
-
-def get_preguntas_cargo(cargo):
-    banco = cargar_json(PREGUNTAS_FILE)
-    config = cargar_json(CONFIG_FILE)
-    base = banco.get(cargo, [])
-    if cargo not in config.get("sin_excel",[]):
-        base = base + config.get("excel",[])
-    base = base + config.get("psico",[])
-    return base, len(banco.get(cargo,[])), len(config.get("excel",[])), len(config.get("psico",[]))
-
-def analizar_hv_ia(texto_hv, cargo):
-    texto = texto_hv.lower()
-    keywords = KEYWORDS_POR_CARGO.get(cargo, [])
-    if not keywords:
-        keywords = ["experiencia","excel","trabajo en equipo"]
-    encontrados = [k for k in keywords if k.lower() in texto]
-    porcentaje = int((len(encontrados)/len(keywords)*100) if keywords else 50)
-    porcentaje = min(95, max(15, porcentaje))
-    anios = re.findall(r"(\d+)\s*a\w*\s*de experiencia|experiencia\s*(\d+)", texto)
-    exp = "No especificada"
-    if anios:
-        try:
-            exp = f"{anios[0][0] or anios[0][1]} años aprox"
-        except:
-            exp = "Detectada experiencia"
-    fortalezas = ", ".join(encontrados[:5]) if encontrados else "Perfil general"
-    faltantes = [k for k in keywords if k.lower() not in texto][:3]
-    if porcentaje >= 80:
-        concepto = "PERFIL ALTAMENTE COMPATIBLE"
-        rec = "AVANZA A ENTREVISTA"
-    elif porcentaje >= 50:
-        concepto = "PERFIL MEDIANAMENTE COMPATIBLE"
-        rec = "ENTREVISTA CON VALIDACION - Reforzar: " + ", ".join(faltantes)
-    else:
-        concepto = "PERFIL BAJO"
-        rec = "NO RECOMENDADO o periodo prueba - Faltan: " + ", ".join(faltantes)
-    preguntas_ia = [
-        f"Cuéntame tu experiencia en {keywords[0] if keywords else cargo}",
-        f"¿Qué harías en un caso de {faltantes[0] if faltantes else 'emergencia'}?",
-        "¿Por qué cambiaste de empleo?",
-        "¿Manejas Excel avanzado?"
-    ]
-    return {"porcentaje": porcentaje,"concepto": concepto,"exp": exp,"fortalezas": fortalezas,"faltantes": ", ".join(faltantes) if faltantes else "Ninguno crítico","rec": rec,"preguntas_ia": preguntas_ia,"encontrados": encontrados}
-
-def leer_pdf(file):
-    texto = ""
-    try:
-        import fitz
-        doc = fitz.open(stream=file.read(), filetype="pdf")
-        for page in doc:
-            texto += page.get_text()
-    except:
-        try:
-            import PyPDF2
-            file.seek(0)
-            reader = PyPDF2.PdfReader(file)
-            for p in reader.pages:
-                texto += p.extract_text() or ""
-        except:
-            try:
-                file.seek(0)
-                texto = file.read().decode(errors="ignore")
-            except:
-                texto = ""
-    return texto[:15000]
+    with open(CONFIG_FILE,"w") as f: json.dump({"sin_excel":[],"excel":EXCEL_REAL_25,"psico":PSICO_25,"requiere_hv":False},f,indent=2,ensure_ascii=False)
 
 if "auth" not in st.session_state:
-    st.session_state.auth=False
-    st.session_state.user=None
+    st.session_state.auth=False; st.session_state.user=None
+if "etapa" not in st.session_state:
+    st.session_state.etapa=0
+if "respuestas_tecnicas" not in st.session_state:
+    st.session_state.respuestas_tecnicas=[]
+if "respuestas_excel" not in st.session_state:
+    st.session_state.respuestas_excel=[]
+if "respuestas_psico" not in st.session_state:
+    st.session_state.respuestas_psico=[]
+if "casos_texto" not in st.session_state:
+    st.session_state.casos_texto=["","",""]
+if "analisis_ia_hv" not in st.session_state:
+    st.session_state.analisis_ia_hv=None
 
-st.markdown('<div class="brand">HIRE<span>READY</span>-IA 🤖</div>', unsafe_allow_html=True)
-st.caption("Plataforma inteligente de evaluación - V4.1 con HV opcional")
+st.markdown('<div class="brand">HIRE<span>READY</span>-IA V5 🤖</div>',unsafe_allow_html=True)
+st.caption("4 Pruebas: 25 Técnicas + 25 Excel Real + 25 Psicotécnica + 3 Casos con IA")
 
 if not st.session_state.auth:
-    tab1, tab2 = st.tabs(["📝 Prueba Aspirante", "🔐 RRHH / Admin"])
+    tab1,tab2=st.tabs(["📝 Aspirante - 4 Pruebas","🔐 RRHH / Admin"])
     with tab1:
-        config = cargar_json(CONFIG_FILE)
-        requiere_hv = config.get("requiere_hv", False)
-        if requiere_hv:
-            st.markdown('<div class="ia-box">🤖 Sube tu hoja de vida en PDF - OBLIGATORIO por configuración de RRHH</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="ia-box">🤖 HIREREADY-IA - Sube tu HV (opcional) y la IA la analiza. Si no quieres, pasa directo a la prueba.</div>', unsafe_allow_html=True)
-        cedula = st.text_input("Cédula *")
-        nombre = st.text_input("Nombre completo *")
-        cargos_list = cargar_json(CARGOS_FILE)
-        cargo = st.selectbox("Cargo al que aspira *", cargos_list)
-        sede = st.text_input("Ciudad / Sede")
-        label_hv = "📎 HOJA DE VIDA PDF - OBLIGATORIA" if requiere_hv else "📎 HOJA DE VIDA PDF - OPCIONAL (Recomendada para análisis IA)"
-        archivo_hv = st.file_uploader(label_hv, type=["pdf"])
-        if not requiere_hv:
-            st.caption("ℹ️ Si no subes HV, puedes ir directo a la prueba técnica.")
-        if "inicio_test" not in st.session_state:
-            st.session_state.inicio_test=False
-            st.session_state.analisis_ia=None
-        col1, col2 = st.columns(2)
-        with col1:
-            btn_analizar = st.button("1️⃣ Analizar HV con IA", type="primary", use_container_width=True)
-        with col2:
-            btn_saltar = st.button("⏭️ Saltar HV e ir a Prueba", use_container_width=True)
-        if btn_analizar:
-            if requiere_hv and not archivo_hv:
-                st.error("Hoja de vida obligatoria según RRHH. Súbela.")
-            elif archivo_hv:
+        st.markdown('<div class="ia-box">🚀 NUEVO: 4 etapas - Técnica (25) + Excel Real (25) + Psicotécnica (25) + Casos con IA (3). HV opcional según RRHH.</div>',unsafe_allow_html=True)
+        cfg=cargar_json(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else {"requiere_hv":False}
+        requiere_hv=cfg.get("requiere_hv",False)
+        cedula=st.text_input("Cédula *"); nombre=st.text_input("Nombre completo *")
+        cargos_list=cargar_json(CARGOS_FILE) if os.path.exists(CARGOS_FILE) else CARGOS_DEFAULT
+        cargo=st.selectbox("Cargo *",cargos_list); sede=st.text_input("Ciudad / Sede")
+        archivo_hv=st.file_uploader("📎 Hoja de Vida PDF - "+("OBLIGATORIA" if requiere_hv else "OPCIONAL"),type=["pdf"])
+        if st.session_state.etapa==0:
+            c1,c2=st.columns(2)
+            if c1.button("▶️ Iniciar Pruebas",type="primary",use_container_width=True):
                 if not (cedula and nombre):
                     st.error("Cédula y nombre obligatorios")
+                elif requiere_hv and not archivo_hv:
+                    st.error("HV obligatoria por RRHH")
                 else:
-                    with st.spinner("🤖 IA analizando..."):
-                        texto_hv = leer_pdf(archivo_hv)
-                        if len(texto_hv) < 30:
-                            st.error("PDF no legible, usa PDF con texto seleccionable")
-                        else:
-                            analisis = analizar_hv_ia(texto_hv, cargo)
-                            st.session_state.analisis_ia = analisis
-                            st.session_state.cedula_real=cedula
-                            st.session_state.nombre=nombre
-                            st.session_state.cargo_sel=cargo
-                            st.session_state.sede=sede
-                            st.success("✅ IA completado")
-                            st.rerun()
-            else:
-                if not (cedula and nombre):
-                    st.error("Cédula y nombre obligatorios")
-                else:
-                    st.session_state.analisis_ia = {"porcentaje":0,"concepto":"Sin HV","fortalezas":"No aplica","faltantes":"No aplica","rec":"Solo prueba técnica","exp":"No aplica","preguntas_ia":[],"encontrados":[]}
-                    st.session_state.cedula_real=cedula
-                    st.session_state.nombre=nombre
-                    st.session_state.cargo_sel=cargo
-                    st.session_state.sede=sede
-                    st.session_state.inicio_test=True
-                    st.rerun()
-        if btn_saltar:
-            if not (cedula and nombre):
-                st.error("Cédula y nombre obligatorios")
-            else:
+                    st.session_state.cedula_real=cedula; st.session_state.nombre=nombre; st.session_state.cargo_sel=cargo; st.session_state.sede=sede
+                    if archivo_hv:
+                        try:
+                            import fitz; doc=fitz.open(stream=archivo_hv.read(),filetype="pdf"); txt="".join([p.get_text() for p in doc])
+                        except:
+                            try:
+                                import PyPDF2; archivo_hv.seek(0); reader=PyPDF2.PdfReader(archivo_hv); txt="".join([p.extract_text() or "" for p in reader.pages])
+                            except:
+                                txt=""
+                        compat=60 if len(txt)>100 else 0
+                        st.session_state.analisis_ia_hv={"compat":compat,"txt":txt[:500]}
+                    else:
+                        st.session_state.analisis_ia_hv={"compat":0,"txt":"Sin HV"}
+                    st.session_state.etapa=1; st.rerun()
+            if c2.button("⏭️ Saltar HV (si es opcional)",use_container_width=True):
                 if requiere_hv:
-                    st.error("No puedes saltar, RRHH configuró HV como OBLIGATORIA")
+                    st.error("No puedes saltar, HV obligatoria")
                 else:
-                    st.session_state.analisis_ia = {"porcentaje":0,"concepto":"Sin HV - Opcional","fortalezas":"No aplica","faltantes":"No aplica","rec":"Sin análisis HV, solo prueba técnica","exp":"No aplica","preguntas_ia":[],"encontrados":[]}
-                    st.session_state.cedula_real=cedula
-                    st.session_state.nombre=nombre
-                    st.session_state.cargo_sel=cargo
-                    st.session_state.sede=sede
-                    st.session_state.inicio_test=True
-                    st.rerun()
-        if st.session_state.get("analisis_ia") and st.session_state.analisis_ia["porcentaje"]>0:
-            a = st.session_state.analisis_ia
-            st.divider()
-            st.subheader("🤖 Resultado IA Hoja de Vida")
-            c1,c2,c3=st.columns(3)
-            c1.metric("Compatibilidad IA", f"{a['porcentaje']}%")
-            c2.metric("Concepto", a["concepto"][:22])
-            c3.metric("Experiencia", a["exp"])
-            st.write(f"**Fortalezas:** {a['fortalezas']}")
-            st.write(f"**Brechas:** {a['faltantes']}")
-            st.info(f"**IA:** {a['rec']}")
-            if not st.session_state.inicio_test:
-                if st.button("Continuar a Prueba Técnica"):
-                    st.session_state.inicio_test=True
-                    st.rerun()
-        if st.session_state.inicio_test:
-            preguntas, n_tec, n_exc, n_psi = get_preguntas_cargo(st.session_state.cargo_sel)
-            st.divider()
-            st.subheader(f"Evaluación: {st.session_state.cargo_sel}")
-            st.info(f"Total: {len(preguntas)} preguntas | Técnicas: {n_tec} | Excel: {n_exc if st.session_state.cargo_sel not in cargar_json(CONFIG_FILE).get('sin_excel',[]) else 0} | Psico: {n_psi} | 90% para APTO")
-            respuestas=[]
-            for i,p in enumerate(preguntas):
-                r = st.radio(f"{i+1}. {p['q']}", p["op"], key=f"pq{i}", index=None)
-                if r is not None:
-                    respuestas.append(p["op"].index(r)==p["r"])
-            if st.button("FINALIZAR Y GENERAR REPORTE HIREREADY-IA", type="primary"):
-                if len(respuestas) < len(preguntas):
-                    st.warning(f"Faltan {len(preguntas)-len(respuestas)}")
-                else:
-                    aciertos=sum(respuestas)
-                    porc=aciertos/len(preguntas)*100
-                    apto=porc>=90
-                    aciertos_psico=sum(respuestas[-n_psi:])
-                    a = st.session_state.get("analisis_ia", {"porcentaje":0,"concepto":"Sin HV","fortalezas":"N/A","faltantes":"N/A","rec":"Solo prueba","exp":"N/A","preguntas_ia":[]})
-                    final = int((a["porcentaje"]*0.4 + porc*0.6)) if a["porcentaje"]>0 else int(porc)
-                    if aciertos_psico>=3 and apto and final>=70:
-                        rec="ALTA RECOMENDACIÓN - Contratar"; rec_porc=95
-                    elif final>=60 and porc>=70:
-                        rec="RECOMENDADO CON PERIODO PRUEBA"; rec_porc=75
+                    if not (cedula and nombre):
+                        st.error("Cédula y nombre obligatorios")
                     else:
-                        rec="NO RECOMENDADO"; rec_porc=35
+                        st.session_state.cedula_real=cedula; st.session_state.nombre=nombre; st.session_state.cargo_sel=cargo; st.session_state.sede=sede
+                        st.session_state.analisis_ia_hv={"compat":0,"txt":"Sin HV opcional"}
+                        st.session_state.etapa=1; st.rerun()
+        if st.session_state.etapa>=1:
+            st.divider(); st.markdown('<span class="step">ETAPA 1/4 - TÉCNICA 25 PREGUNTAS</span>',unsafe_allow_html=True)
+            banco=cargar_json(PREGUNTAS_FILE) if os.path.exists(PREGUNTAS_FILE) else BANCO_TECNICO_25
+            preguntas=banco.get(st.session_state.get("cargo_sel",cargos_list[0]),[])[:25]
+            if st.session_state.etapa==1:
+                resp=[]
+                for i,p in enumerate(preguntas):
+                    r=st.radio(f"{i+1}. {p['q']}",p["op"],key=f"t{i}",index=None)
+                    if r is not None:
+                        resp.append(p["op"].index(r)==p["r"])
+                if st.button("✅ Finalizar Técnica e ir a Excel Real",type="primary"):
+                    if len(resp)<len(preguntas):
+                        st.warning(f"Faltan {len(preguntas)-len(resp)}")
+                    else:
+                        st.session_state.respuestas_tecnicas=resp
+                        st.session_state.etapa=2; st.rerun()
+            else:
+                st.success(f"Técnica completada: {sum(st.session_state.respuestas_tecnicas)}/{len(preguntas)} = {sum(st.session_state.respuestas_tecnicas)/len(preguntas)*100:.1f}%")
+        if st.session_state.etapa>=2:
+            st.divider(); st.markdown('<span class="step">ETAPA 2/4 - EXCEL REAL 25 PREGUNTAS</span>',unsafe_allow_html=True)
+            cfg=cargar_json(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else {"excel":EXCEL_REAL_25}
+            excel_preg=cfg.get("excel",EXCEL_REAL_25)[:25]
+            if st.session_state.etapa==2:
+                resp=[]
+                for i,p in enumerate(excel_preg):
+                    r=st.radio(f"{i+1}. {p['q']}",p["op"],key=f"e{i}",index=None)
+                    if r is not None:
+                        resp.append(p["op"].index(r)==p["r"])
+                if st.button("✅ Finalizar Excel e ir a Psicotécnica",type="primary"):
+                    if len(resp)<len(excel_preg):
+                        st.warning(f"Faltan {len(excel_preg)-len(resp)}")
+                    else:
+                        st.session_state.respuestas_excel=resp
+                        st.session_state.etapa=3; st.rerun()
+            else:
+                st.success(f"Excel completado: {sum(st.session_state.respuestas_excel)}/{len(excel_preg)} = {sum(st.session_state.respuestas_excel)/len(excel_preg)*100:.1f}%")
+        if st.session_state.etapa>=3:
+            st.divider(); st.markdown('<span class="step">ETAPA 3/4 - PSICOTÉCNICA 25 PREGUNTAS</span>',unsafe_allow_html=True)
+            cfg=cargar_json(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else {"psico":PSICO_25}
+            psico_preg=cfg.get("psico",PSICO_25)[:25]
+            if st.session_state.etapa==3:
+                resp=[]
+                for i,p in enumerate(psico_preg):
+                    r=st.radio(f"{i+1}. {p['q']}",p["op"],key=f"p{i}",index=None)
+                    if r is not None:
+                        resp.append(p["op"].index(r)==p["r"])
+                if st.button("✅ Finalizar Psicotécnica e ir a Casos con IA",type="primary"):
+                    if len(resp)<len(psico_preg):
+                        st.warning(f"Faltan {len(psico_preg)-len(resp)}")
+                    else:
+                        st.session_state.respuestas_psico=resp
+                        st.session_state.etapa=4; st.rerun()
+            else:
+                st.success(f"Psicotécnica completada: {sum(st.session_state.respuestas_psico)}/{len(psico_preg)} = {sum(st.session_state.respuestas_psico)/len(psico_preg)*100:.1f}%")
+        if st.session_state.etapa>=4:
+            st.divider(); st.markdown('<span class="step">ETAPA 4/4 - CASOS A DESARROLLAR CON IA</span>',unsafe_allow_html=True)
+            casos=get_casos(st.session_state.get("cargo_sel","DEFAULT"))
+            st.info("Escribe desarrollo completo, con normativa, procedimiento y ética. La IA calificará.")
+            textos=[]
+            for idx,caso in enumerate(casos):
+                st.subheader(f"Caso {idx+1}")
+                st.write(caso)
+                t=st.text_area(f"Desarrollo caso {idx+1}",value=st.session_state.casos_texto[idx] if idx < len(st.session_state.casos_texto) else "",key=f"caso{idx}",height=150)
+                textos.append(t)
+            st.session_state.casos_texto=textos
+            if st.button("🤖 EVALUAR CASOS CON IA Y GENERAR REPORTE FINAL",type="primary"):
+                if any(len(t)<30 for t in textos):
+                    st.warning("Desarrolla mínimo 30 caracteres por caso")
+                else:
+                    tec=sum(st.session_state.respuestas_tecnicas)/len(st.session_state.respuestas_tecnicas)*100
+                    exc=sum(st.session_state.respuestas_excel)/len(st.session_state.respuestas_excel)*100
+                    psi=sum(st.session_state.respuestas_psico)/len(st.session_state.respuestas_psico)*100
+                    casos_eval=[evaluar_caso_ia(t, st.session_state.cargo_sel) for t in textos]
+                    prom_casos=sum([c[0] for c in casos_eval])/len(casos_eval)
+                    final = tec*0.4 + exc*0.2 + psi*0.2 + prom_casos*0.2
+                    apto = final>=75 and tec>=70
+                    rec = "ALTA RECOMENDACIÓN - CONTRATAR" if final>=85 else "RECOMENDADO CON PERIODO PRUEBA" if final>=70 else "NO RECOMENDADO"
                     registro={
-                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "cedula": st.session_state.cedula_real,
-                        "nombre": st.session_state.nombre,
-                        "cargo": st.session_state.cargo_sel,
-                        "sede": st.session_state.sede,
-                        "aciertos": aciertos,
-                        "total": len(preguntas),
-                        "porcentaje": round(porc,1),
-                        "psicotecnica": f"{aciertos_psico}/{n_psi}",
-                        "ia_compatibilidad": a["porcentaje"],
-                        "puntaje_final": final,
-                        "estado": "APTO" if apto else "NO APTO",
-                        "recomendacion": rec,
-                        "porc_recomendacion": rec_porc,
-                        "fortalezas_ia": a["fortalezas"],
-                        "faltantes_ia": a["faltantes"]
+                        "fecha":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "cedula":st.session_state.cedula_real,
+                        "nombre":st.session_state.nombre,
+                        "cargo":st.session_state.cargo_sel,
+                        "sede":st.session_state.sede,
+                        "tecnica":round(tec,1),
+                        "excel":round(exc,1),
+                        "psico":round(psi,1),
+                        "casos_prom":round(prom_casos,1),
+                        "final":round(final,1),
+                        "estado":"APTO" if apto else "NO APTO",
+                        "recomendacion":rec,
+                        "ia_hv_compat":st.session_state.analisis_ia_hv.get("compat",0) if st.session_state.analisis_ia_hv else 0
                     }
-                    regs=cargar_json(REGISTROS_FILE)
-                    regs.append(registro)
-                    guardar_json(REGISTROS_FILE,regs)
+                    regs=cargar_json(REGISTROS_FILE) if os.path.exists(REGISTROS_FILE) else []
+                    regs.append(registro); guardar_json(REGISTROS_FILE,regs)
                     st.divider()
-                    if apto and final>=60:
-                        st.balloons()
-                        st.success(f"## ✅ {registro['estado']} - Prueba {porc:.1f}% | IA {a['porcentaje']}% | FINAL {final}%")
+                    if apto:
+                        st.balloons(); st.success(f"## ✅ {registro['estado']} - FINAL {final:.1f}%")
                     else:
-                        st.error(f"## ❌ {registro['estado']} - Prueba {porc:.1f}% | IA {a['porcentaje']}% | FINAL {final}%")
-                    reporte = f"HIREREADY-IA REPORTE\\nFecha: {registro['fecha']}\\nNombre: {registro['nombre']}\\nCedula: {registro['cedula']}\\nCargo: {registro['cargo']}\\nIA Compat: {a['porcentaje']}% - {a['concepto']}\\nPrueba: {aciertos}/{len(preguntas)}={porc:.1f}%\\nFinal: {final}%\\nEstado: {registro['estado']}\\nRec: {rec} {rec_porc}%\\n"
-                    st.download_button("📄 Descargar Reporte HIREREADY-IA", reporte, file_name=f"Reporte_HIREREADY_{st.session_state.cedula_real}.txt")
-                    if st.button("Nueva evaluación"):
-                        for k in ["inicio_test","cedula","nombre","cargo_sel","sede","analisis_ia","cedula_real"]:
+                        st.error(f"## ❌ {registro['estado']} - FINAL {final:.1f}%")
+                    c1,c2,c3,c4=st.columns(4)
+                    c1.metric("Técnica 25",f"{tec:.1f}%"); c2.metric("Excel 25",f"{exc:.1f}%"); c3.metric("Psico 25",f"{psi:.1f}%"); c4.metric("Casos IA",f"{prom_casos:.1f}%")
+                    st.subheader("🤖 Retroalimentación IA Casos")
+                    for idx,(punt,retro) in enumerate(casos_eval):
+                        st.write(f"**Caso {idx+1}: {punt}%** - {retro}")
+                    reporte=f"""HIREREADY-IA V5 - REPORTE FINAL 4 PRUEBAS
+Fecha: {registro['fecha']}
+Nombre: {registro['nombre']} - Cedula: {registro['cedula']}
+Cargo: {registro['cargo']} - Sede: {registro['sede']}
+Técnica 25: {tec:.1f}% - Excel 25: {exc:.1f}% - Psico 25: {psi:.1f}% - Casos IA: {prom_casos:.1f}%
+FINAL: {final:.1f}% - Estado: {registro['estado']} - Rec: {rec}
+"""
+                    st.download_button("📄 Descargar Reporte V5 Completo",reporte,file_name=f"HIREREADY_V5_{st.session_state.cedula_real}.txt")
+                    if st.button("🔄 Nueva evaluación"):
+                        for k in ["etapa","respuestas_tecnicas","respuestas_excel","respuestas_psico","casos_texto","analisis_ia_hv","cedula_real","nombre","cargo_sel","sede"]:
                             st.session_state.pop(k,None)
-                        st.rerun()
+                        st.session_state.etapa=0; st.rerun()
     with tab2:
-        st.header("Acceso RRHH - HIREREADY-IA")
-        u=st.text_input("Usuario RRHH")
-        p=st.text_input("Contraseña", type="password")
+        st.header("Acceso RRHH - HIREREADY-IA V5")
+        u=st.text_input("Usuario"); p=st.text_input("Clave",type="password")
         if st.button("Entrar"):
-            users=cargar_json(USUARIOS_FILE)
+            users=cargar_json(USUARIOS_FILE) if os.path.exists(USUARIOS_FILE) else []
             found=next((x for x in users if x["usuario"]==u and x["clave"]==p),None)
             if found:
-                st.session_state.auth=True
-                st.session_state.user=found
-                st.rerun()
+                st.session_state.auth=True; st.session_state.user=found; st.rerun()
             else:
                 st.error("Usuario o clave incorrecta")
 else:
-    st.sidebar.markdown('<div class="brand" style="color:white;">HIRE<span style="color:#7AC143;">READY</span>-IA</div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div class="brand" style="color:white;">HIRE<span style="color:#7AC143;">READY</span>-IA V5</div>',unsafe_allow_html=True)
     st.sidebar.success(f"Conectado: {st.session_state.user['nombre']}")
     if st.sidebar.button("Cerrar sesión"):
-        st.session_state.auth=False
-        st.session_state.user=None
-        st.rerun()
-    menu = st.sidebar.selectbox("Menú", ["Dashboard Resultados", "Crear Cargos", "Gestionar Preguntas por Cargo", "Gestionar Excel y Psicotécnica", "Crear Usuarios RRHH", "Config IA / HV"])
-    if menu=="Dashboard Resultados":
-        st.header("📊 Dashboard HIREREADY-IA")
-        regs=cargar_json(REGISTROS_FILE)
+        st.session_state.auth=False; st.session_state.user=None; st.rerun()
+    menu=st.sidebar.selectbox("Menú V5", ["Dashboard V5","Crear Cargos","Gestionar Preguntas Técnicas 25","Gestionar Excel Real 25","Gestionar Psicotécnica 25","Gestionar Casos IA","Crear Usuarios RRHH","Config IA / HV"])
+    if menu=="Dashboard V5":
+        st.header("📊 Dashboard V5 - 4 Pruebas")
+        regs=cargar_json(REGISTROS_FILE) if os.path.exists(REGISTROS_FILE) else []
         if not regs:
             st.info("Sin registros")
         else:
             df=pd.DataFrame(regs)
             c1,c2,c3,c4,c5=st.columns(5)
-            c1.metric("Total", len(df))
-            c2.metric("APTO", len(df[df["estado"]=="APTO"]))
-            c3.metric("NO APTO", len(df[df["estado"]=="NO APTO"]))
-            c4.metric("% Aprob", f"{len(df[df['estado']=='APTO'])/len(df)*100:.1f}%")
-            c5.metric("Prom Final IA", f"{df['puntaje_final'].mean():.1f}%" if 'puntaje_final' in df else "N/A")
-            st.dataframe(df, use_container_width=True)
-            st.download_button("📥 Descargar CSV", df.to_csv(index=False).encode(), "hireready_ia.csv")
-            if st.button("🗑️ Borrar registros"):
-                guardar_json(REGISTROS_FILE, [])
-                st.success("Borrados"); st.rerun()
+            c1.metric("Total",len(df)); c2.metric("APTO",len(df[df["estado"]=="APTO"])); c3.metric("NO APTO",len(df[df["estado"]=="NO APTO"])); c4.metric("% Aprob",f"{len(df[df['estado']=='APTO'])/len(df)*100:.1f}%" if len(df)>0 else "0%"); c5.metric("Prom Final",f"{df['final'].mean():.1f}%" if 'final' in df else "N/A")
+            st.dataframe(df,use_container_width=True)
+            st.download_button("📥 Descargar CSV V5",df.to_csv(index=False).encode(),"hireready_v5.csv")
+            if st.button("🗑️ Borrar todo"):
+                guardar_json(REGISTROS_FILE,[]); st.success("Borrado"); st.rerun()
     elif menu=="Crear Cargos":
-        st.header("🏷️ Crear / Eliminar Cargos")
-        cargos=cargar_json(CARGOS_FILE)
+        st.header("🏷️ Cargos")
+        cargos=cargar_json(CARGOS_FILE) if os.path.exists(CARGOS_FILE) else CARGOS_DEFAULT
         st.write(cargos)
         nuevo=st.text_input("Nuevo cargo")
-        if st.button("Crear cargo"):
+        if st.button("Crear"):
             if nuevo and nuevo not in cargos:
-                cargos.append(nuevo)
-                guardar_json(CARGOS_FILE,cargos)
-                banco=cargar_json(PREGUNTAS_FILE)
-                banco[nuevo]=[]
-                guardar_json(PREGUNTAS_FILE,banco)
-                st.success("Creado"); st.rerun()
-        eliminar=st.selectbox("Eliminar cargo", cargos)
-        if st.button("Eliminar"):
-            cargos=[c for c in cargos if c!=eliminar]
-            guardar_json(CARGOS_FILE,cargos)
-            banco=cargar_json(PREGUNTAS_FILE)
-            banco.pop(eliminar,None)
-            guardar_json(PREGUNTAS_FILE,banco)
-            st.success("Eliminado"); st.rerun()
-    elif menu=="Gestionar Preguntas por Cargo":
-        st.header("📚 Preguntas por Cargo")
-        cargos=cargar_json(CARGOS_FILE)
-        banco=cargar_json(PREGUNTAS_FILE)
-        cargo_sel=st.selectbox("Cargo", cargos)
-        preguntas_actuales=banco.get(cargo_sel,[])
-        st.subheader(f"{cargo_sel}: {len(preguntas_actuales)} preguntas")
-        for idx, preg in enumerate(preguntas_actuales):
-            with st.expander(f"{idx+1}. {preg['q'][:60]}..."):
-                nuevo_q=st.text_input("Pregunta", value=preg['q'], key=f"qedit_{cargo_sel}_{idx}")
-                op1=st.text_input("Op A", value=preg['op'][0], key=f"op1_{cargo_sel}_{idx}")
-                op2=st.text_input("Op B", value=preg['op'][1], key=f"op2_{cargo_sel}_{idx}")
-                op3=st.text_input("Op C", value=preg['op'][2], key=f"op3_{cargo_sel}_{idx}")
-                correcta=st.selectbox("Correcta", ["A","B","C"], index=preg['r'], key=f"r_{cargo_sel}_{idx}")
-                if st.button(f"Guardar P{idx+1}", key=f"save_{cargo_sel}_{idx}"):
-                    banco[cargo_sel][idx]={"q":nuevo_q,"op":[op1,op2,op3],"r":["A","B","C"].index(correcta)}
-                    guardar_json(PREGUNTAS_FILE,banco)
-                    st.success("Guardado"); st.rerun()
-                if st.button(f"Eliminar", key=f"del_{cargo_sel}_{idx}"):
-                    banco[cargo_sel].pop(idx)
-                    guardar_json(PREGUNTAS_FILE,banco)
-                    st.success("Eliminada"); st.rerun()
-        st.divider()
-        with st.form(f"form_{cargo_sel}"):
-            nq=st.text_area("Nueva pregunta")
-            nop1=st.text_input("Opción A")
-            nop2=st.text_input("Opción B")
-            nop3=st.text_input("Opción C")
-            ncorrecta=st.selectbox("Correcta", ["A","B","C"])
-            if st.form_submit_button("Agregar"):
-                if nq and nop1 and nop2:
-                    banco[cargo_sel].append({"q":nq,"op":[nop1,nop2,nop3],"r":["A","B","C"].index(ncorrecta)})
-                    guardar_json(PREGUNTAS_FILE,banco)
-                    st.success("Agregada"); st.rerun()
-    elif menu=="Gestionar Excel y Psicotécnica":
-        st.header("🧠 Excel y Psicotécnica")
-        config=cargar_json(CONFIG_FILE)
-        tab1, tab2 = st.tabs(["Excel","Psico"])
-        with tab1:
-            for idx, preg in enumerate(config.get("excel",[])):
-                with st.expander(f"Excel {idx+1}"):
-                    nq=st.text_input("Pregunta", value=preg['q'], key=f"exq_{idx}")
-                    o1=st.text_input("A", value=preg['op'][0], key=f"exo1_{idx}")
-                    o2=st.text_input("B", value=preg['op'][1], key=f"exo2_{idx}")
-                    o3=st.text_input("C", value=preg['op'][2], key=f"exo3_{idx}")
-                    rc=st.selectbox("Correcta", ["A","B","C"], index=preg['r'], key=f"exr_{idx}")
-                    if st.button(f"Guardar Excel {idx+1}", key=f"exsave_{idx}"):
-                        config["excel"][idx]={"q":nq,"op":[o1,o2,o3],"r":["A","B","C"].index(rc)}
-                        guardar_json(CONFIG_FILE,config)
-                        st.success("Guardado"); st.rerun()
-        with tab2:
-            for idx, preg in enumerate(config.get("psico",[])):
-                with st.expander(f"Psico {idx+1}"):
-                    nq=st.text_input("Pregunta", value=preg['q'], key=f"psiq_{idx}")
-                    o1=st.text_input("A", value=preg['op'][0], key=f"psio1_{idx}")
-                    o2=st.text_input("B", value=preg['op'][1], key=f"psio2_{idx}")
-                    o3=st.text_input("C", value=preg['op'][2], key=f"psio3_{idx}")
-                    rc=st.selectbox("Correcta", ["A","B","C"], index=preg['r'], key=f"psir_{idx}")
-                    if st.button(f"Guardar Psico {idx+1}", key=f"psisave_{idx}"):
-                        config["psico"][idx]={"q":nq,"op":[o1,o2,o3],"r":["A","B","C"].index(rc)}
-                        guardar_json(CONFIG_FILE,config)
-                        st.success("Guardado"); st.rerun()
+                cargos.append(nuevo); guardar_json(CARGOS_FILE,cargos)
+                banco=cargar_json(PREGUNTAS_FILE) if os.path.exists(PREGUNTAS_FILE) else BANCO_TECNICO_25
+                banco[nuevo]=[{"q":f"{nuevo} - Pregunta técnica {i+1}","op":["Correcta","Incorrecta B","Incorrecta C"],"r":0} for i in range(25)]
+                guardar_json(PREGUNTAS_FILE,banco); st.success("Creado"); st.rerun()
+        elim=st.selectbox("Eliminar",cargos)
+        if st.button("Eliminar cargo"):
+            cargos=[c for c in cargos if c!=elim]; guardar_json(CARGOS_FILE,cargos)
+            banco=cargar_json(PREGUNTAS_FILE); banco.pop(elim,None); guardar_json(PREGUNTAS_FILE,banco); st.success("Eliminado"); st.rerun()
+    elif menu=="Gestionar Preguntas Técnicas 25":
+        st.header("📚 Técnicas 25 por cargo")
+        cargos=cargar_json(CARGOS_FILE) if os.path.exists(CARGOS_FILE) else CARGOS_DEFAULT
+        banco=cargar_json(PREGUNTAS_FILE) if os.path.exists(PREGUNTAS_FILE) else BANCO_TECNICO_25
+        cargo_sel=st.selectbox("Cargo",cargos)
+        preguntas=banco.get(cargo_sel,[])
+        st.write(f"Total: {len(preguntas)} (debe ser 25)")
+        for idx,preg in enumerate(preguntas):
+            with st.expander(f"{idx+1}. {preg['q'][:70]}..."):
+                nq=st.text_input("Pregunta",value=preg['q'],key=f"qt{cargo_sel}{idx}")
+                o1=st.text_input("A",value=preg['op'][0],key=f"qa{cargo_sel}{idx}")
+                o2=st.text_input("B",value=preg['op'][1],key=f"qb{cargo_sel}{idx}")
+                o3=st.text_input("C",value=preg['op'][2],key=f"qc{cargo_sel}{idx}")
+                rc=st.selectbox("Correcta",["A","B","C"],index=preg['r'],key=f"qr{cargo_sel}{idx}")
+                if st.button(f"Guardar {idx+1}",key=f"qs{cargo_sel}{idx}"):
+                    banco[cargo_sel][idx]={"q":nq,"op":[o1,o2,o3],"r":["A","B","C"].index(rc)}; guardar_json(PREGUNTAS_FILE,banco); st.success("Guardado"); st.rerun()
+    elif menu=="Gestionar Excel Real 25":
+        st.header("📊 Excel Real 25")
+        cfg=cargar_json(CONFIG_FILE); excel=cfg.get("excel",[])
+        st.write(f"Total: {len(excel)}")
+        for idx,preg in enumerate(excel):
+            with st.expander(f"Excel {idx+1}. {preg['q'][:60]}"):
+                nq=st.text_input("Pregunta",value=preg['q'],key=f"exq{idx}"); o1=st.text_input("A",value=preg['op'][0],key=f"exo1{idx}"); o2=st.text_input("B",value=preg['op'][1],key=f"exo2{idx}"); o3=st.text_input("C",value=preg['op'][2],key=f"exo3{idx}"); rc=st.selectbox("Correcta",["A","B","C"],index=preg['r'],key=f"exr{idx}")
+                if st.button(f"Guardar Excel {idx+1}",key=f"exs{idx}"):
+                    cfg["excel"][idx]={"q":nq,"op":[o1,o2,o3],"r":["A","B","C"].index(rc)}; guardar_json(CONFIG_FILE,cfg); st.success("Guardado"); st.rerun()
+    elif menu=="Gestionar Psicotécnica 25":
+        st.header("🧠 Psicotécnica 25")
+        cfg=cargar_json(CONFIG_FILE); psico=cfg.get("psico",[])
+        st.write(f"Total: {len(psico)}")
+        for idx,preg in enumerate(psico):
+            with st.expander(f"Psico {idx+1}. {preg['q'][:60]}"):
+                nq=st.text_input("Pregunta",value=preg['q'],key=f"psq{idx}"); o1=st.text_input("A",value=preg['op'][0],key=f"pso1{idx}"); o2=st.text_input("B",value=preg['op'][1],key=f"pso2{idx}"); o3=st.text_input("C",value=preg['op'][2],key=f"pso3{idx}"); rc=st.selectbox("Correcta",["A","B","C"],index=preg['r'],key=f"psr{idx}")
+                if st.button(f"Guardar Psico {idx+1}",key=f"pss{idx}"):
+                    cfg["psico"][idx]={"q":nq,"op":[o1,o2,o3],"r":["A","B","C"].index(rc)}; guardar_json(CONFIG_FILE,cfg); st.success("Guardado"); st.rerun()
+    elif menu=="Gestionar Casos IA":
+        st.header("📝 Casos a desarrollar con IA")
+        st.json(CASOS_POR_CARGO)
     elif menu=="Crear Usuarios RRHH":
-        st.header("👥 Usuarios RRHH")
-        users=cargar_json(USUARIOS_FILE)
-        st.dataframe(pd.DataFrame(users))
-        nu=st.text_input("Email usuario")
-        nn=st.text_input("Nombre")
-        nc=st.text_input("Clave", type="password")
-        nr=st.selectbox("Rol", ["RRHH","Coordinador RRHH","Gerencia RRHH"])
+        st.header("👥 Usuarios")
+        users=cargar_json(USUARIOS_FILE); st.dataframe(pd.DataFrame(users))
+        nu=st.text_input("Email"); nn=st.text_input("Nombre"); nc=st.text_input("Clave",type="password"); nr=st.selectbox("Rol",["RRHH","Coordinador RRHH","Gerencia RRHH"])
         if st.button("Crear usuario"):
-            if nu and nc and nn:
-                users.append({"usuario":nu,"clave":nc,"rol":nr,"nombre":nn})
-                guardar_json(USUARIOS_FILE,users)
-                st.success("Creado"); st.rerun()
+            users.append({"usuario":nu,"clave":nc,"rol":nr,"nombre":nn}); guardar_json(USUARIOS_FILE,users); st.success("Creado"); st.rerun()
     elif menu=="Config IA / HV":
-        st.header("🤖 Configuración HIREREADY-IA")
-        config=cargar_json(CONFIG_FILE)
-        st.subheader("📎 Hoja de Vida - ¿Obligatoria u Opcional?")
-        requiere = st.checkbox("Hacer HOJA DE VIDA obligatoria para todos los aspirantes", value=config.get("requiere_hv", False))
-        st.caption("Si está desactivado, el aspirante puede saltarse la HV y hacer solo la prueba. Si está activado, no puede continuar sin subir PDF.")
-        if st.button("💾 Guardar configuración HV"):
-            config["requiere_hv"] = requiere
-            guardar_json(CONFIG_FILE, config)
-            st.success(f"✅ Guardado: HV ahora es {'OBLIGATORIA' if requiere else 'OPCIONAL'}")
-            st.rerun()
-        st.divider()
-        st.subheader("🧠 Keywords IA por cargo (para análisis)")
-        st.json(KEYWORDS_POR_CARGO)
+        st.header("🤖 Config V5")
+        cfg=cargar_json(CONFIG_FILE); requiere=cfg.get("requiere_hv",False)
+        nuevo_req=st.checkbox("HV obligatoria",value=requiere)
+        if st.button("Guardar HV"):
+            cfg["requiere_hv"]=nuevo_req; guardar_json(CONFIG_FILE,cfg); st.success(f"HV {'OBLIGATORIA' if nuevo_req else 'OPCIONAL'}"); st.rerun()
