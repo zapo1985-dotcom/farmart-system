@@ -1,94 +1,114 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import random
+import json
+import os
 
-st.set_page_config(page_title="FARMART SYSTEM", layout="wide")
-st.title("FARMART SYSTEM - HR Testing 90% APTO")
+st.set_page_config(page_title="FARMART SYSTEM", page_icon="💊", layout="wide")
 
-if 'base' not in st.session_state:
-    st.session_state.base = []
-if 'paso' not in st.session_state:
-    st.session_state.paso = "login"
+# --- BASE DE DATOS SIMPLE ---
+DB_FILE = "registros.json"
+if not os.path.exists(DB_FILE):
+    with open(DB_FILE, "w") as f:
+        json.dump([], f)
 
-# SIDEBAR ADMIN
-with st.sidebar:
-    st.header("Admin Farmart")
-    user = st.text_input("Usuario")
-    pwd = st.text_input("Clave", type="password")
-    es_admin = (user == "admin@farmart.system" and pwd == "Farmart2026*")
-    if es_admin:
-        st.success("Admin OK")
-        st.session_state.paso = "admin"
+def cargar_datos():
+    with open(DB_FILE, "r") as f:
+        return json.load(f)
 
-# DASHBOARD ADMIN
-if st.session_state.paso == "admin" and es_admin:
-    st.subheader("Lista Candidatos 90%+ APTO")
-    df = pd.DataFrame(st.session_state.base)
-    c1,c2 = st.columns(2)
-    c1.metric("Total", len(df))
-    if not df.empty:
-        aptos = df[df['final'] >= 90]
-        c2.metric("90%+ APTO", len(aptos))
-        filtro = st.checkbox("Solo mostrar 90%+ APTO", value=True)
-        tabla = aptos if filtro else df
-        st.dataframe(tabla, use_container_width=True)
-        st.download_button("Descargar Excel", tabla.to_csv(index=False), "FARMART_90.csv")
-    else:
-        st.info("Base vacia")
-    if st.button("Salir"):
-        st.session_state.paso = "login"
-        st.rerun()
+def guardar_datos(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
-# CANDIDATO
-else:
-    st.header("Registro por Cedula")
-    col1,col2,col3 = st.columns(3)
-    cedula = col1.text_input("CEDULA")
-    nombre = col2.text_input("Nombre")
-    cargo = col3.selectbox("Cargo", ["Bodega","Mensajero","Servicios Generales","Tesoreria","Calidad","Juridica","Archivo","Auditoria Formulas","Oncologia","DBA","Fullstack","TI"])
+# --- PREGUNTAS (Ejemplo 20, luego pones las 100) ---
+PREGUNTAS = [
+    {"q": "¿Que es BPM?", "op": ["Buenas Practicas de Manufactura","Buen Proceso Manual","Base de Producto Medico"], "r": 0},
+    {"q": "¿Temperatura de cadena de frio?", "op": ["2-8°C","10-15°C","-20°C"], "r": 0},
+    {"q": "¿Que es FEFO?", "op": ["First Expire First Out","First Entry First Out","Fast Expire Fast Out"], "r": 0},
+    {"q": "¿Que hacer si encuentras medicamento vencido?", "op": ["Separar y reportar","Devolver a estante","Vender rapido"], "r": 0},
+    {"q": "¿Que es un Lote?", "op": ["Conjunto de productos misma fabricacion","Numero de estante","Codigo de cliente"], "r": 0},
+    # Agrega aqui hasta 100 preguntas
+]
 
-    if st.button("Iniciar Prueba"):
-        if cedula and nombre:
-            st.session_state.ced = {"cedula":cedula,"nombre":nombre,"cargo":cargo,"pts":0,"idx":0}
-            st.session_state.paso = "prueba"
-            st.rerun()
-        else:
-            st.error("Llene cedula y nombre")
+# --- INTERFAZ ---
+st.title("💊 FARMART - Sistema de Evaluación")
+st.markdown("**Droguerías - Evaluación 90% APTO**")
 
-    if st.session_state.paso == "prueba" and 'ced' in st.session_state:
-        preguntas = [
-            {"q":"PEPS significa?","o":["Primeras Entrar Primeras Salir","Producto Expira Pronto Sale"],"a":0},
-            {"q":"Nevera 2-8C fuera de rango?","o":["Reporto a Calidad y cuarentena","Lo despacho igual"],"a":0},
-            {"q":"BUSCARV no encuentra?","o":["Espacios extra","Excel danado"],"a":0},
-            {"q":"Suma ventas Cali enero?","o":["SUMAR.SI.CONJUNTO","SUMA"],"a":0},
-            {"q":"Formula Losartan 50mg pero paciente 70a dosis 25mg?","o":["Valido con medico","Despacho 90"],"a":0},
-        ]
-        idx = st.session_state.ced["idx"]
-        if idx < len(preguntas):
-            p = preguntas[idx]
-            st.write(f"Pregunta {idx+1}/{len(preguntas)}: {p['q']}")
-            r = st.radio("Seleccione", p['o'], index=None, key=idx)
-            if st.button("Siguiente"):
-                if r is None:
-                    st.error("Seleccione opcion")
+menu = st.sidebar.selectbox("Menu", ["Prueba Empleado", "Admin"])
+
+if menu == "Prueba Empleado":
+    st.header("Registro del Empleado")
+    col1, col2 = st.columns(2)
+    with col1:
+        cedula = st.text_input("CÉDULA *")
+        nombre = st.text_input("Nombre completo *")
+    with col2:
+        cargo = st.selectbox("Cargo", ["Bodega","Mensajero","Calidad","Auditoria","DBA","Auxiliar"])
+        sede = st.text_input("Sede")
+
+    if cedula and nombre:
+        st.divider()
+        st.header(f"Evaluación - {len(PREGUNTAS)} Preguntas")
+        respuestas = []
+        for i, p in enumerate(PREGUNTAS):
+            resp = st.radio(f"{i+1}. {p['q']}", p["op"], key=f"q{i}", index=None)
+            if resp is not None:
+                respuestas.append(p["op"].index(resp) == p["r"])
+        
+        if st.button("FINALIZAR PRUEBA", type="primary"):
+            if len(respuestas) < len(PREGUNTAS):
+                st.warning(f"Responde todas. Llevas {len(respuestas)}/{len(PREGUNTAS)}")
+            else:
+                aciertos = sum(respuestas)
+                porcentaje = (aciertos / len(PREGUNTAS)) * 100
+                apto = porcentaje >= 90
+                
+                registro = {
+                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "cedula": cedula,
+                    "nombre": nombre,
+                    "cargo": cargo,
+                    "sede": sede,
+                    "aciertos": aciertos,
+                    "total": len(PREGUNTAS),
+                    "porcentaje": round(porcentaje,1),
+                    "estado": "APTO" if apto else "NO APTO"
+                }
+                datos = cargar_datos()
+                datos.append(registro)
+                guardar_datos(datos)
+                
+                if apto:
+                    st.balloons()
+                    st.success(f"### ✅ APTO - {porcentaje:.1f}% ({aciertos}/{len(PREGUNTAS)})")
                 else:
-                    if r == p['o'][p['a']]:
-                        st.session_state.ced["pts"] += 1
-                    st.session_state.ced["idx"] += 1
-                    st.rerun()
+                    st.error(f"### ❌ NO APTO - {porcentaje:.1f}% ({aciertos}/{len(PREGUNTAS)}) - Se requiere 90%")
+                st.json(registro)
+
+else: # ADMIN
+    st.header("🔐 Panel Admin")
+    user = st.text_input("Usuario")
+    pwd = st.text_input("Contraseña", type="password")
+    
+    if user == "admin@farmart.system" and pwd == "Farmart2026*":
+        st.success("Admin autenticado")
+        datos = cargar_datos()
+        if not datos:
+            st.info("Sin registros aún")
         else:
-            final = int(st.session_state.ced["pts"]/len(preguntas)*100)
-            estado = "90%+ APTO" if final >= 90 else "REFUERZO"
-            st.success(f"Resultado {final}% - {estado}")
-            st.session_state.base.append({
-                "cedula": st.session_state.ced["cedula"],
-                "nombre": st.session_state.ced["nombre"],
-                "cargo": st.session_state.ced["cargo"],
-                "final": final,
-                "estado": estado,
-                "fecha": datetime.now().strftime("%d/%m/%Y")
-            })
-            if st.button("Finalizar"):
-                st.session_state.paso = "login"
+            df = pd.DataFrame(datos)
+            c1,c2,c3 = st.columns(3)
+            c1.metric("Total evaluados", len(df))
+            c2.metric("APTO (≥90%)", len(df[df["estado"]=="APTO"]))
+            c3.metric("% Aprobación", f"{len(df[df['estado']=='APTO'])/len(df)*100:.1f}%" if len(df)>0 else "0%")
+            
+            st.dataframe(df, use_container_width=True)
+            
+            # Descargar Excel
+            st.download_button("📥 Descargar Excel", df.to_csv(index=False).encode(), "farmart_resultados.csv", "text/csv")
+            
+            if st.button("🗑️ Borrar todos los registros"):
+                guardar_datos([])
                 st.rerun()
+    elif user or pwd:
+        st.error("Usuario o clave incorrecta")
